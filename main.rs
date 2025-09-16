@@ -1,5 +1,5 @@
 use bon::Builder;
-use eyre::{Error, Result};
+use eyre::{Error, OptionExt, Result};
 use mimalloc::MiMalloc;
 use std::path::Path;
 use tap::prelude::*;
@@ -8,8 +8,12 @@ use tracing::{Level, info};
 use vortex::{
   ToCanonical,
   arrays::{PrimitiveArray, StructArray},
+  buffer::Buffer,
+  builders::StructBuilder,
+  dtype::Nullability,
   file::{VortexOpenOptions, VortexWriteOptions},
   iter::ArrayIteratorExt,
+  scalar::StructScalar,
   validity::Validity,
 };
 
@@ -40,16 +44,29 @@ async fn main() -> Result<()> {
     .read_all()?
     .to_struct()
     .tap(|duckdb| info!(?duckdb, tree = %duckdb.display_tree(), values = %duckdb.display_values()));
-  Messages::try_from(duckdb)?.tap(|messages| info!(?messages));
+  let mut builder = StructBuilder::new(duckdb.struct_fields().clone(), Nullability::NonNullable);
+  duckdb.append_to_builder(&mut builder);
+  Messages::try_from(&duckdb)?.tap(|messages| info!(?messages));
+  messages.append_to_builder(&mut builder);
+  let mut file = File::create(out.join("combined.vortex")).await?;
+  builder
+    .finish_into_struct()
+    .tap(|combined| info!(?combined, tree = %combined.display_tree(), values = %combined.display_values()))
+    .to_array_stream()
+    .pipe(|stream| VortexWriteOptions::default().write(&mut file, stream))
+    .await?;
+  let scalar = messages.scalar_at(0);
+  let message = scalar.as_struct().try_conv::<Message>()?;
+  info!(?scalar, ?message);
   Ok(())
 }
 
 #[derive(Debug)]
 struct Messages(Vec<Message>);
 
-impl TryFrom<StructArray> for Messages {
+impl TryFrom<&StructArray> for Messages {
   type Error = Error;
-  fn try_from(array: StructArray) -> Result<Self, Self::Error> {
+  fn try_from(array: &StructArray) -> Result<Self, Self::Error> {
     let a = array.field_by_name("a")?.to_primitive();
     let b = array.field_by_name("b")?.to_primitive();
     a.as_slice()
@@ -76,8 +93,8 @@ impl TryFrom<Messages> for StructArray {
     Ok(StructArray::try_new(
       ["a", "b"].into(),
       vec![
-        PrimitiveArray::from_iter(a).into(),
-        PrimitiveArray::from_iter(b).into(),
+        PrimitiveArray::new(Buffer::from_iter(a), Validity::AllValid).into(),
+        PrimitiveArray::new(Buffer::from_iter(b), Validity::AllValid).into(),
       ],
       length,
       Validity::NonNullable,
@@ -89,4 +106,23 @@ impl TryFrom<Messages> for StructArray {
 struct Message {
   a: i64,
   b: i64,
+}
+
+impl TryFrom<StructScalar<'_>> for Message {
+  type Error = Error;
+  fn try_from(scalar: StructScalar) -> Result<Self, Self::Error> {
+    let a = scalar
+      .field("a")
+      .ok_or_eyre("a:field")?
+      .as_primitive()
+      .typed_value::<i64>()
+      .ok_or_eyre("a:typed_value")?;
+    let b = scalar
+      .field("b")
+      .ok_or_eyre("b:field")?
+      .as_primitive()
+      .typed_value::<i64>()
+      .ok_or_eyre("b:typed_value")?;
+    Ok(Message::builder().a(a).b(b).build())
+  }
 }
