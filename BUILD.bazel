@@ -1,0 +1,16 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+rust_binary(
+  name = "main",
+  srcs = ["main.rs"],
+  deps = [
+    "@crates//:bon",
+    "@crates//:eyre",
+    "@crates//:mimalloc",
+    "@crates//:tap",
+    "@crates//:tokio",
+    "@crates//:tracing",
+    "@crates//:tracing-subscriber",
+    "@crates//:vortex",
+  ],
+)

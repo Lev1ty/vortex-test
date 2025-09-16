@@ -1,0 +1,8 @@
+/bazel-bin
+/bazel-out
+/bazel-testlogs
+/bazel-vortex-test
+/MODULE.bazel.lock
+/out
+/rust-project.json
+.DS_Store

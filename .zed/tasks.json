@@ -1,0 +1,7 @@
+[
+  {
+    "label": "run",
+    "command": "bazel run //:main",
+    "env": { "OUT": "$ZED_WORKTREE_ROOT/out" }
+  }
+]
