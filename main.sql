@@ -2,5 +2,7 @@ INSTALL vortex FROM community;
 LOAD vortex;
 FROM read_vortex('out/messages.vortex');
 CREATE TEMP TABLE duckdb AS SELECT unnest(generate_series(1, 10)) AS a, unnest(generate_series(1, 10)) AS b;
+ALTER TABLE duckdb ALTER COLUMN a SET NOT NULL;
+ALTER TABLE duckdb ALTER COLUMN b SET NOT NULL;
 FROM duckdb;
 COPY duckdb TO 'out/duckdb.vortex' (FORMAT VORTEX);

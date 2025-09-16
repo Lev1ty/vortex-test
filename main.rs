@@ -66,9 +66,9 @@ impl TryFrom<StructArray> for Messages {
 impl TryFrom<Messages> for StructArray {
   type Error = Error;
   fn try_from(Messages(messages): Messages) -> Result<Self, Self::Error> {
-    let mut a = vec![0; messages.len()];
-    let mut b = vec![0; messages.len()];
     let length = messages.len();
+    let mut a = vec![0; length];
+    let mut b = vec![0; length];
     messages.into_iter().enumerate().for_each(|(i, message)| {
       a[i] = message.a;
       b[i] = message.b;
